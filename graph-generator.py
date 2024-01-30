@@ -2,10 +2,9 @@ import os
 import pygame
 from pygame.locals import *
 import random
-import re
 
 node_repulsion = -2
-reference_attraction = 100
+reference_attraction = 10
 center_attraction = 0.001
 node_damping = 0.95
 
@@ -14,6 +13,7 @@ class Node:
         self.positionx, self.positiony = position
         self.velocityx, self.velocityy = 0, 0
         self.file_name = file_name
+        self.references = []
 
     def update_velocity(self, repulsion_force_x, repulsion_force_y, attraction_force_x, attraction_force_y, center_attraction_x, center_attraction_y):
         global node_repulsion, reference_attraction, node_damping
@@ -36,7 +36,6 @@ class Simulation:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.nodes = []
-        self.references = {}
 
         # Initialize Pygame
         pygame.init()
@@ -44,24 +43,29 @@ class Simulation:
         # Initialize Pygame screen
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption('Markdown References Simulation')
-
-    def extract_references(self, file_path):
-        with open(file_path, 'r', encoding='utf-8') as file:
-            content = file.read()
-            references = re.findall(r'\[\[(.*?)\]\]', content)
-            return references
-
-    def load_nodes(self):
-        for root, dirs, files in os.walk(self.folder):
+        
+    # 
+    def load_nodes(self, folder):
+        for root, dirs, files in os.walk(folder):
             for file in files:
                 if file.endswith(".md"):
                     file_path = os.path.join(root, file)
-                    position = random.uniform(0, self.screen_width), random.uniform(0, self.screen_height)
-                    node = Node(position, file)
-                    self.nodes.append(node)
-                    self.references[file] = self.extract_references(file_path)
-        print(self.references)  # print the references dictionary
-        
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        references = []
+                        for line in content.split('\n'):
+                            if '[[' in line and ']]' in line:
+                                start = line.index('[[')
+                                end = line.index(']]')
+                                reference = line[start + 2:end]
+                                references.append(reference)
+                                print(f"Reference added from {file}: {reference}")
+                        position = random.uniform(0, self.screen_width), random.uniform(0, self.screen_height)
+                        node = Node(position, file)
+                        node.references = references
+                        print(f"Node created at {position} with references {references}")
+                        self.nodes.append(node)
+
     def update_simulation(self):
         for node in self.nodes:
             repulsion_force_x, repulsion_force_y = 0, 0
@@ -79,12 +83,6 @@ class Simulation:
                     # Repulsion force inversely proportional to distance
                     repulsion_force_x += distance_x / (distance_squared + 1e-5)
                     repulsion_force_y += distance_y / (distance_squared + 1e-5)
-
-                    # Check if other_node is referenced by node
-                    if other_node.file_name in self.references.get(node.file_name, []):
-                        # Attraction force towards the referenced node
-                        attraction_force_x += distance_x
-                        attraction_force_y += distance_y
 
             # Calculate center attraction force
             center_attraction_x = (self.screen_width / 2 - node.positionx) * center_attraction
@@ -113,20 +111,21 @@ class Simulation:
                 self.screen.blit(label, label_rect)
             
             # Draw nodes
-            pygame.draw.circle(self.screen, (255, 255, 255), node_pos, node_radius)
+            pygame.draw.circle(self.screen, (255, 255, 255), node_pos, node_radius)  # White nodes
             
-        '''
-        # Draw grey lines between nodes that have references
-        for node1 in self.nodes:
-            for node2 in self.nodes:
-                if node2.file_name in self.references.get(node1.file_name, []):
-                    pygame.draw.line(self.screen, (128, 128, 128), (node1.positionx, node1.positiony), (node2.positionx, node2.positiony), 1)
-        '''          
-
+            # Draw lines between nodes
+            for reference in node.references:
+                for other_node in self.nodes:
+                    # print(f"Checking if {reference} is in {other_node.file_name}")
+                    if other_node.file_name == reference:
+                        print(f"Drawing line from {node.file_name} to {other_node.file_name}")
+                        pygame.draw.line(self.screen, (255, 255, 255), node_pos, (int(other_node.positionx), int(other_node.positiony)), 1)
+            
         pygame.display.flip()
 
+
     def run_simulation(self):
-        self.load_nodes()
+        self.load_nodes(folder)
 
         running = True
         while running:
@@ -139,9 +138,11 @@ class Simulation:
 
         pygame.quit()
 
+# Define folder and screen dimensions
 folder = "/Users/gagehowe/Library/Mobile Documents/iCloud~md~obsidian/Documents/Gage's Vault"
 screen_width = 1500
 screen_height = 900
 
+# Create and run the simulation
 simulation = Simulation(folder, screen_width, screen_height)
 simulation.run_simulation()
