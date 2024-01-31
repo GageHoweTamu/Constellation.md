@@ -12,3 +12,6 @@ DONE:
 
 TODO:
 * search function
+* test with 10000 md files via https://github.com/rcvd/interconnected-markdown
+
+If you use this, please let me know! I'd love to hear how this can be improved or expanded.
