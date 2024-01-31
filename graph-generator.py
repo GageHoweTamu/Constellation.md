@@ -63,11 +63,12 @@ class Slider:
             self.update()
 
 class Node:
-    def __init__(self, position, file_name):
+    def __init__(self, position, file_name, size):
         self.positionx, self.positiony = position
         self.velocityx, self.velocityy = 0, 0
         self.file_name = file_name
         self.references = []
+        self.size = size
 
     def update_velocity(self, repulsion_force_x, repulsion_force_y, attraction_force_x, attraction_force_y, center_attraction_x, center_attraction_y):
         global node_repulsion, reference_attraction, node_damping
@@ -149,17 +150,17 @@ class Simulation:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
                         references = []
+                        # Calculate size based on file size or character count
+                        size = os.path.getsize(file_path)  # Example: Using file size
                         for line in content.split('\n'):
                             if '[[' in line and ']]' in line:
                                 start = line.index('[[')
                                 end = line.index(']]')
                                 reference = line[start + 2:end]
                                 references.append(reference)
-                                # print(f"Reference added from {file}: {reference}")
                         position = random.uniform(0, self.screen_width), random.uniform(0, self.screen_height)
-                        node = Node(position, file)
+                        node = Node(position, file, size)
                         node.references = references
-                        # print(f"Node created at {position} with references {references}")
                         self.nodes.append(node)
 
     def update_simulation(self):
@@ -210,12 +211,13 @@ class Simulation:
         self.slider_transparency_radius.slider_button_rect.centerx = int(self.slider_transparency_radius.x + self.slider_transparency_radius.length * (self.slider_transparency_radius.current_value - self.slider_transparency_radius.min_value) / (self.slider_transparency_radius.max_value - self.slider_transparency_radius.min_value))
         
         mouse_x, mouse_y = pygame.mouse.get_pos()
+    
 
         for node in self.nodes:
             
             int_node_pos = (int(node.positionx), int(node.positiony))
             
-            node_radius = 3
+            node_radius = int((node.size)**0.1+1)
             visible_radius = 50
             if (int_node_pos[0] - mouse_x) ** 2 + (int_node_pos[1] - mouse_y) ** 2 < visible_radius ** 2:
                 font = pygame.font.Font(None, 20)
@@ -249,7 +251,6 @@ class Simulation:
         self.screen.blit(line_surface, (0, 0))
         pygame.display.flip()
 
-
     def run_simulation(self):
         self.load_nodes(target_folder)
 
@@ -262,20 +263,17 @@ class Simulation:
                     print("Clicked! :) ")
                     mouse_x, mouse_y = event.pos
                     for node in self.nodes:
-                        #print(f"Checking {node.file_name}")
                         if self.node_clicked(node, mouse_x, mouse_y):
                             print(f"Opening {node.file_name}")
                             self.open_md_file(node.file_name[:-3])
                             break
-                
-                # Handle slider events
+
                 self.slider_node_repulsion.handle_event(event)
                 self.slider_reference_attraction.handle_event(event)
                 self.slider_center_attraction.handle_event(event)
                 self.slider_node_damping.handle_event(event)
                 self.slider_transparency_radius.handle_event(event)
 
-            # Update simulation based on slider values
             global node_repulsion, reference_attraction, center_attraction, node_damping
             node_repulsion = self.slider_node_repulsion.current_value
             reference_attraction = self.slider_reference_attraction.current_value
@@ -287,16 +285,15 @@ class Simulation:
 
             self.update_simulation()
             self.draw_simulation()
-            #print(node_repulsion, reference_attraction, center_attraction, node_damping)
 
         pygame.quit()
 
     def open_md_file(self, file_name):
         md_file_path = os.path.join(self.folder, file_name + ".md")
-        subprocess.run(["open", md_file_path])  # macOS-specific, adjust for other platforms
+        subprocess.run(["open", md_file_path]) # may be mac-specific
         
     def node_clicked(self, node, mouse_x, mouse_y):
-        node_radius = 4  # Adjust according to your node size
+        node_radius = 5
         distance_squared = (node.positionx - mouse_x) ** 2 + (node.positiony - mouse_y) ** 2
         return distance_squared <= node_radius ** 2
     
