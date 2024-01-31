@@ -9,6 +9,7 @@ DONE:
 * length-based transparency for lines between linked files
 * highlighting name and references for selected files
 * opening clicked files
+* visually shows size of files
 
 TODO:
 * search function
