@@ -2,9 +2,11 @@ import os
 import pygame
 from pygame.locals import *
 import random
-from pygame_widgets.slider import Slider
 import subprocess
 import math
+import tkinter as tk
+from tkinter import filedialog
+import threading
 
 node_repulsion = -10
 reference_attraction = 0.0
@@ -12,12 +14,72 @@ center_attraction = 0.0
 node_damping = 0.0
 transparency_radius = 0.5
 
+paused = False
+
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
 
 def sigmoid(x, scale=2, shift=-0.5):
     return 1 / (1 + math.exp(-(x - shift) * scale))
+
+def change_directory():                                         
+    print("change_directory called")
+    root = tk.Tk()
+    root.withdraw()
+    print("root withdrawn")
+    start_thread()
+    new_folder = filedialog.askdirectory()
+    if new_folder:
+        simulation.folder = new_folder
+        start_thread()
+
+def prompt_file():                                                  # from stackoverflow
+    """Create a Tk file dialog and cleanup when finished"""
+    print("prompt_file called")
+    global target_folder
+    global paused
+    
+    paused = True
+    print("paused")
+    top = tk.Tk() # this step causes the program to crash
+    print("top created")
+    
+    top.withdraw()  # hide window
+    print("top withdrawn")
+    
+    target_folder = tk.filedialog.askopenfilename(parent=top)
+    print("file_name assigned")
+    
+    top.destroy()
+    print("top destroyed")
+    
+    paused = False
+    
+    return target_folder
+    
+
+class Button:
+    def __init__(self, x, y, width, height, text, command):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        self.command = command
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, GRAY, self.rect)
+        font = pygame.font.Font(None, 20)
+        text_surface = font.render(self.text, True, WHITE)
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        screen.blit(text_surface, text_rect)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.command()
+
+    def get_rect(self):
+        return self.rect
+
 
 class Slider:
     def __init__(self, x, y, length, min_value, max_value, initial_value, label):
@@ -91,6 +153,9 @@ class Simulation:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.nodes = []
+        
+        self.dialog_open = False
+
 
         # Initialize Pygame
         pygame.init()
@@ -98,6 +163,8 @@ class Simulation:
         # Initialize Pygame screen
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption('Markdown References Simulation')
+        
+        self.change_directory_button = Button(self.screen_width // 2 - 75, self.screen_height - 50, 150, 30, "Change Directory", prompt_file)
 
         # Create sliders
         
@@ -141,8 +208,29 @@ class Simulation:
                                                         2,
                                                         0.7,
                                     "Transparency Radius")
+    
+    def change_directory(self):
+        print("self.change_directory called")
+
+        threading.Thread(target=self.open_file_dialog).start()
+        
+    def open_file_dialog(self):
+        print("self.open_file_dialog called")
+        self.dialog_open = True
+        print("step 1")
+        root = tk.Tk() # this step causes the program to crash with "zsh: trace trap"
+        print("root created")
+        root.withdraw()
+        print("step 2")
+        new_folder = filedialog.askdirectory()
+        print(f"passed the new folder step")
+        if new_folder:
+            self.folder = new_folder
+            self.load_nodes(self.folder)
+        self.dialog_open = False
 
     def load_nodes(self, folder):
+        self.nodes.clear()  # Clear existing nodes
         for root, dirs, files in os.walk(folder):
             for file in files:
                 if file.endswith(".md"):
@@ -211,14 +299,15 @@ class Simulation:
         self.slider_transparency_radius.slider_button_rect.centerx = int(self.slider_transparency_radius.x + self.slider_transparency_radius.length * (self.slider_transparency_radius.current_value - self.slider_transparency_radius.min_value) / (self.slider_transparency_radius.max_value - self.slider_transparency_radius.min_value))
         
         mouse_x, mouse_y = pygame.mouse.get_pos()
-    
+
+        self.change_directory_button.draw(self.screen)
 
         for node in self.nodes:
             
             int_node_pos = (int(node.positionx), int(node.positiony))
             
-            node_radius = int((node.size)**0.1+1)
-            visible_radius = 50
+            node_radius = int((node.size)**0.15+1)
+            visible_radius = 20
             if (int_node_pos[0] - mouse_x) ** 2 + (int_node_pos[1] - mouse_y) ** 2 < visible_radius ** 2:
                 font = pygame.font.Font(None, 20)
                 label = font.render(str(node.file_name), True, (255, 255, 255))
@@ -233,19 +322,14 @@ class Simulation:
                     if other_node.file_name == (reference + ".md"):
                         #print(f"Drawing line from {node.file_name} to {other_node.file_name}")
                         distance = ((int_node_pos[0] - other_node.positionx) ** 2 + (int_node_pos[1] - other_node.positiony) ** 2) ** 0.5
-                        #print(f"Distance: {distance}")
-                        
-
 
                         transparency = int(255 - sigmoid(transparency_radius) * (distance + 1))
                         if (int_node_pos[0] - mouse_x) ** 2 + (int_node_pos[1] - mouse_y) ** 2 < visible_radius ** 2:
                             transparency = max(0, min(255, 255))
                         else:
                             transparency = max(0, min(255, transparency))
-                        # Create a color with the desired transparency
                         line_color = pygame.Color(255, 255, 255, transparency)
-                        
-                        # Draw the line on the surface
+                    
                         pygame.draw.line(line_surface, line_color, int_node_pos, (int(other_node.positionx), int(other_node.positiony)), 1)
 
         self.screen.blit(line_surface, (0, 0))
@@ -254,20 +338,20 @@ class Simulation:
     def run_simulation(self):
         self.load_nodes(target_folder)
 
-        running = True
-        while running:
+        global paused
+        paused = False
+        while not paused:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    running = False
+                    paused = True
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left mouse button
-                    print("Clicked! :) ")
                     mouse_x, mouse_y = event.pos
+                    self.change_directory_button.handle_event(event)
                     for node in self.nodes:
                         if self.node_clicked(node, mouse_x, mouse_y):
                             print(f"Opening {node.file_name}")
                             self.open_md_file(node.file_name[:-3])
                             break
-
                 self.slider_node_repulsion.handle_event(event)
                 self.slider_reference_attraction.handle_event(event)
                 self.slider_center_attraction.handle_event(event)
@@ -285,7 +369,7 @@ class Simulation:
 
             self.update_simulation()
             self.draw_simulation()
-
+        print("Quitting")
         pygame.quit()
 
     def open_md_file(self, file_name):
